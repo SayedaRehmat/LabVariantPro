@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import firebase_admin
 from firebase_admin import credentials, auth
 import vcfpy
@@ -8,39 +9,41 @@ import io
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ───── Firebase Admin Init ─────
+# ───────────── Firebase Secure Init ─────────────
 if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")
+    cred = credentials.Certificate(st.secrets["firebase"])
     firebase_admin.initialize_app(cred)
 
-# ───── Login UI ─────
+# ───────────── Streamlit UI ─────────────
 st.set_page_config(page_title="LabVariantPro", layout="wide")
 st.title("🧬 LabVariantPro – VCF Annotation Tool")
 
-st.sidebar.header("🔐 Secure Lab Login")
-email = st.sidebar.text_input("Lab Email")
+st.sidebar.header("🔐 Lab Login")
+email = st.sidebar.text_input("Email")
+
 if st.sidebar.button("Login"):
     try:
         user = auth.get_user_by_email(email)
         st.session_state["user"] = user.email
-        st.sidebar.success(f"Welcome, {user.email}")
+        st.sidebar.success(f"✅ Logged in as: {user.email}")
     except:
-        st.sidebar.error("Invalid email. Not registered.")
+        st.sidebar.error("❌ Email not found. Please contact admin.")
 
-# Require login
 if "user" not in st.session_state:
-    st.warning("Please log in using a valid lab email.")
+    st.warning("Please log in with a valid lab email to access the tool.")
     st.stop()
 
-st.success(f"✅ Logged in as: {st.session_state['user']}")
+st.success(f"Logged in as {st.session_state['user']}")
 
-# ───── Annotation Logic ─────
+# ───────────── Annotation Logic ─────────────
 def annotate_variant(chrom, pos, ref, alt):
     hgvs = f"{chrom}:g.{pos}{ref}>{alt}"
     url = f"https://myvariant.info/v1/variant/{hgvs}"
     try:
         res = requests.get(url)
-        data = res.json() if res.status_code == 200 else {}
+        if res.status_code != 200:
+            return {'clinvar': 'NA', 'acmg': 'Uncertain', 'rules_applied': []}
+        data = res.json()
         clinvar = data.get('clinvar', {}).get('clinical_significance', 'NA')
         af = data.get('gnomad', {}).get('af', 0)
         rules = []
@@ -49,11 +52,12 @@ def annotate_variant(chrom, pos, ref, alt):
             elif af > 0.05: rules.append('BA1')
         if 'mutationtaster' in data:
             rules.append('PP3')
-        acmg = (
-            "Likely Pathogenic" if 'pathogenic' in str(clinvar).lower()
-            else "Likely Benign" if 'benign' in str(clinvar).lower()
-            else "Uncertain"
-        )
+        if 'pathogenic' in str(clinvar).lower():
+            acmg = 'Likely Pathogenic'
+        elif 'benign' in str(clinvar).lower():
+            acmg = 'Likely Benign'
+        else:
+            acmg = 'Uncertain'
         return {
             'clinvar': clinvar,
             'gnomad_af': af,
@@ -63,19 +67,22 @@ def annotate_variant(chrom, pos, ref, alt):
     except:
         return {'clinvar': 'Error', 'acmg': 'Error', 'rules_applied': []}
 
-# ───── VCF Parser ─────
+# ───────────── VCF Parsing ─────────────
 def parse_vcf(file_obj):
     reader = vcfpy.Reader(file_obj)
     records = []
-    for rec in reader:
-        chrom = rec.CHROM
-        pos = rec.POS
-        ref = rec.REF
-        alt = rec.ALT[0].value
-        qual = rec.QUAL
+    for record in reader:
+        chrom = record.CHROM
+        pos = record.POS
+        ref = record.REF
+        alt = record.ALT[0].value
+        qual = record.QUAL
         ann = annotate_variant(chrom, pos, ref, alt)
         records.append({
-            'CHROM': chrom, 'POS': pos, 'REF': ref, 'ALT': alt,
+            'CHROM': chrom,
+            'POS': pos,
+            'REF': ref,
+            'ALT': alt,
             'QUAL': qual,
             'ClinVar': ann['clinvar'],
             'gnomAD_AF': ann.get('gnomad_af'),
@@ -84,7 +91,7 @@ def parse_vcf(file_obj):
         })
     return pd.DataFrame(records)
 
-# ───── PDF Generator ─────
+# ───────────── PDF Generator ─────────────
 def generate_pdf(df, output_path="report.pdf"):
     c = canvas.Canvas(output_path, pagesize=letter)
     c.setFont("Helvetica", 12)
@@ -99,22 +106,21 @@ def generate_pdf(df, output_path="report.pdf"):
             y = 750
     c.save()
 
-# ───── Upload UI ─────
+# ───────────── Upload & Display ─────────────
 uploaded_file = st.file_uploader("📂 Upload a `.vcf` file", type=["vcf"])
 
 if uploaded_file:
     try:
-        with io.TextIOWrapper(uploaded_file, encoding='utf-8') as vcf_io:
+        with io.TextIOWrapper(uploaded_file, encoding="utf-8") as vcf_io:
             df = parse_vcf(vcf_io)
-            st.session_state["df"] = df
-            st.success("✅ File parsed successfully.")
+            st.success("✅ VCF file parsed successfully.")
             st.dataframe(df)
 
             st.download_button("📥 Download CSV", df.to_csv(index=False).encode(), "labvariant_report.csv")
+
             if st.button("📄 Generate PDF"):
-                generate_pdf(df, "report.pdf")
+                generate_pdf(df)
                 with open("report.pdf", "rb") as f:
                     st.download_button("Download PDF", f, "report.pdf")
-
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error processing file: {e}")
