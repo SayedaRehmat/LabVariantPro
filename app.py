@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 
 # ─────────── Firebase Admin Initialization ───────────
 if not firebase_admin._apps:
-cred = credentials.Certificate(dict(st.secrets["firebase"]))
+   cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 
 # ─────────── Streamlit UI ───────────
