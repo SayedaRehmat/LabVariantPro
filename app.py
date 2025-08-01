@@ -9,9 +9,10 @@ import io
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ───────────── Firebase Secure Init ─────────────
+# ───────────── Firebase Admin Init ─────────────
 if not firebase_admin._apps:
-    cred = credentials.Certificate(st.secrets["firebase"])
+    firebase_config = json.loads(st.secrets["firebase"])
+    cred = credentials.Certificate(firebase_config)
     firebase_admin.initialize_app(cred)
 
 # ───────────── Streamlit UI ─────────────
@@ -30,10 +31,10 @@ if st.sidebar.button("Login"):
         st.sidebar.error("❌ Email not found. Please contact admin.")
 
 if "user" not in st.session_state:
-    st.warning("Please log in with a valid lab email to access the tool.")
+    st.warning("Please log in to access the tool.")
     st.stop()
 
-st.success(f"Logged in as {st.session_state['user']}")
+st.success(f"✅ Access granted: {st.session_state['user']}")
 
 # ───────────── Annotation Logic ─────────────
 def annotate_variant(chrom, pos, ref, alt):
@@ -107,13 +108,13 @@ def generate_pdf(df, output_path="report.pdf"):
     c.save()
 
 # ───────────── Upload & Display ─────────────
-uploaded_file = st.file_uploader("📂 Upload a `.vcf` file", type=["vcf"])
+uploaded_file = st.file_uploader("📂 Upload your `.vcf` file", type=["vcf"])
 
 if uploaded_file:
     try:
         with io.TextIOWrapper(uploaded_file, encoding="utf-8") as vcf_io:
             df = parse_vcf(vcf_io)
-            st.success("✅ VCF file parsed successfully.")
+            st.success("✅ File parsed successfully.")
             st.dataframe(df)
 
             st.download_button("📥 Download CSV", df.to_csv(index=False).encode(), "labvariant_report.csv")
@@ -122,5 +123,6 @@ if uploaded_file:
                 generate_pdf(df)
                 with open("report.pdf", "rb") as f:
                     st.download_button("Download PDF", f, "report.pdf")
+
     except Exception as e:
-        st.error(f"❌ Error processing file: {e}")
+        st.error(f"❌ Error: {e}")
