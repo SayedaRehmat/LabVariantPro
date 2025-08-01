@@ -1,7 +1,6 @@
 streamlit
 firebase-admin
 vcfpy
-requests
 pandas
-plotly
+requests
 reportlab
