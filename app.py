@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 import firebase_admin
 from firebase_admin import credentials, auth
 import vcfpy
@@ -9,18 +8,17 @@ import io
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ───────────── Firebase Admin Init ─────────────
+# ─────────── Firebase Admin Initialization ───────────
 if not firebase_admin._apps:
-    firebase_config = json.loads(st.secrets["firebase"])
-    cred = credentials.Certificate(firebase_config)
+    cred = credentials.Certificate(st.secrets["firebase"])  # ← ✅ FIXED LINE
     firebase_admin.initialize_app(cred)
 
-# ───────────── Streamlit UI ─────────────
+# ─────────── Streamlit UI ───────────
 st.set_page_config(page_title="LabVariantPro", layout="wide")
 st.title("🧬 LabVariantPro – VCF Annotation Tool")
 
 st.sidebar.header("🔐 Lab Login")
-email = st.sidebar.text_input("Email")
+email = st.sidebar.text_input("Lab Email")
 
 if st.sidebar.button("Login"):
     try:
@@ -34,9 +32,9 @@ if "user" not in st.session_state:
     st.warning("Please log in to access the tool.")
     st.stop()
 
-st.success(f"✅ Access granted: {st.session_state['user']}")
+st.success(f"✅ Logged in as: {st.session_state['user']}")
 
-# ───────────── Annotation Logic ─────────────
+# ─────────── Annotation Logic ───────────
 def annotate_variant(chrom, pos, ref, alt):
     hgvs = f"{chrom}:g.{pos}{ref}>{alt}"
     url = f"https://myvariant.info/v1/variant/{hgvs}"
@@ -68,7 +66,7 @@ def annotate_variant(chrom, pos, ref, alt):
     except:
         return {'clinvar': 'Error', 'acmg': 'Error', 'rules_applied': []}
 
-# ───────────── VCF Parsing ─────────────
+# ─────────── VCF File Parser ───────────
 def parse_vcf(file_obj):
     reader = vcfpy.Reader(file_obj)
     records = []
@@ -92,7 +90,7 @@ def parse_vcf(file_obj):
         })
     return pd.DataFrame(records)
 
-# ───────────── PDF Generator ─────────────
+# ─────────── PDF Report Generator ───────────
 def generate_pdf(df, output_path="report.pdf"):
     c = canvas.Canvas(output_path, pagesize=letter)
     c.setFont("Helvetica", 12)
@@ -107,7 +105,7 @@ def generate_pdf(df, output_path="report.pdf"):
             y = 750
     c.save()
 
-# ───────────── Upload & Display ─────────────
+# ─────────── Upload + Output ───────────
 uploaded_file = st.file_uploader("📂 Upload your `.vcf` file", type=["vcf"])
 
 if uploaded_file:
@@ -125,4 +123,4 @@ if uploaded_file:
                     st.download_button("Download PDF", f, "report.pdf")
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error processing VCF: {e}")
