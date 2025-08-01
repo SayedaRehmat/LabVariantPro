@@ -1,48 +1,40 @@
 import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, auth
 import vcfpy
-import requests
 import pandas as pd
+import requests
 import io
-import pyrebase
-from report_generator import generate_pdf
-from firebase_config import firebaseConfig
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
-# Firebase Auth
-firebase = pyrebase.initialize_app(firebaseConfig)
-auth = firebase.auth()
+# ───── Firebase Admin Init ─────
+if not firebase_admin._apps:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
 
+# ───── Login UI ─────
 st.set_page_config(page_title="LabVariantPro", layout="wide")
 st.title("🧬 LabVariantPro – VCF Annotation Tool")
 
-# Login UI in sidebar
-with st.sidebar:
-    st.header("🔐 Login or Sign Up")
-    choice = st.radio("Select Option", ["Login", "Sign Up"])
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-
-    if choice == "Login":
-        if st.button("Login"):
-            try:
-                user = auth.sign_in_with_email_and_password(email, password)
-                st.session_state["user"] = user["email"]
-                st.success(f"Logged in as {user['email']}")
-            except:
-                st.error("Login failed. Please check credentials.")
-    else:
-        if st.button("Sign Up"):
-            try:
-                auth.create_user_with_email_and_password(email, password)
-                st.success("Account created. Please login.")
-            except:
-                st.error("Signup failed.")
+st.sidebar.header("🔐 Secure Lab Login")
+email = st.sidebar.text_input("Lab Email")
+if st.sidebar.button("Login"):
+    try:
+        user = auth.get_user_by_email(email)
+        st.session_state["user"] = user.email
+        st.sidebar.success(f"Welcome, {user.email}")
+    except:
+        st.sidebar.error("Invalid email. Not registered.")
 
 # Require login
 if "user" not in st.session_state:
-    st.warning("Please log in to access annotation.")
+    st.warning("Please log in using a valid lab email.")
     st.stop()
 
-# Annotate variant
+st.success(f"✅ Logged in as: {st.session_state['user']}")
+
+# ───── Annotation Logic ─────
 def annotate_variant(chrom, pos, ref, alt):
     hgvs = f"{chrom}:g.{pos}{ref}>{alt}"
     url = f"https://myvariant.info/v1/variant/{hgvs}"
@@ -71,7 +63,7 @@ def annotate_variant(chrom, pos, ref, alt):
     except:
         return {'clinvar': 'Error', 'acmg': 'Error', 'rules_applied': []}
 
-# Parse VCF
+# ───── VCF Parser ─────
 def parse_vcf(file_obj):
     reader = vcfpy.Reader(file_obj)
     records = []
@@ -92,8 +84,23 @@ def parse_vcf(file_obj):
         })
     return pd.DataFrame(records)
 
-# Upload Section
-uploaded_file = st.file_uploader("Upload a `.vcf` file", type=["vcf"])
+# ───── PDF Generator ─────
+def generate_pdf(df, output_path="report.pdf"):
+    c = canvas.Canvas(output_path, pagesize=letter)
+    c.setFont("Helvetica", 12)
+    c.drawString(100, 750, "Clinical Variant Report")
+    y = 700
+    for _, row in df.iterrows():
+        line = f"{row['CHROM']}:{row['POS']} {row['REF']}>{row['ALT']} | ClinVar: {row['ClinVar']} | ACMG: {row['ACMG']}"
+        c.drawString(50, y, line)
+        y -= 20
+        if y < 50:
+            c.showPage()
+            y = 750
+    c.save()
+
+# ───── Upload UI ─────
+uploaded_file = st.file_uploader("📂 Upload a `.vcf` file", type=["vcf"])
 
 if uploaded_file:
     try:
@@ -110,4 +117,4 @@ if uploaded_file:
                     st.download_button("Download PDF", f, "report.pdf")
 
     except Exception as e:
-        st.error(f"❌ Error processing file: {e}")
+        st.error(f"❌ Error: {e}")
