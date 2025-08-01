@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 
 # ─────────── Firebase Admin Initialization ───────────
 if not firebase_admin._apps:
-   cred = credentials.Certificate(dict(st.secrets["firebase"]))
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))  # ✅ Secure + TOML-safe
     firebase_admin.initialize_app(cred)
 
 # ─────────── Streamlit UI ───────────
@@ -32,9 +32,9 @@ if "user" not in st.session_state:
     st.warning("Please log in to access the tool.")
     st.stop()
 
-st.success(f"✅ Logged in as: {st.session_state['user']}")
+st.success(f"✅ Logged in: {st.session_state['user']}")
 
-# ─────────── Annotation Logic ───────────
+# ─────────── Variant Annotation Logic ───────────
 def annotate_variant(chrom, pos, ref, alt):
     hgvs = f"{chrom}:g.{pos}{ref}>{alt}"
     url = f"https://myvariant.info/v1/variant/{hgvs}"
@@ -66,7 +66,7 @@ def annotate_variant(chrom, pos, ref, alt):
     except:
         return {'clinvar': 'Error', 'acmg': 'Error', 'rules_applied': []}
 
-# ─────────── VCF File Parser ───────────
+# ─────────── VCF Parser ───────────
 def parse_vcf(file_obj):
     reader = vcfpy.Reader(file_obj)
     records = []
@@ -105,7 +105,7 @@ def generate_pdf(df, output_path="report.pdf"):
             y = 750
     c.save()
 
-# ─────────── Upload + Output ───────────
+# ─────────── Upload + Display ───────────
 uploaded_file = st.file_uploader("📂 Upload your `.vcf` file", type=["vcf"])
 
 if uploaded_file:
@@ -123,4 +123,4 @@ if uploaded_file:
                     st.download_button("Download PDF", f, "report.pdf")
 
     except Exception as e:
-        st.error(f"❌ Error processing VCF: {e}")
+        st.error(f"❌ Error processing file: {e}")
