@@ -1,3 +1,4 @@
+
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -8,12 +9,10 @@ import io
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ─────────── Firebase Admin Initialization ───────────
 if not firebase_admin._apps:
-    cred = credentials.Certificate(dict(st.secrets["firebase"]))  # ✅ Secure + TOML-safe
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 
-# ─────────── Streamlit UI ───────────
 st.set_page_config(page_title="LabVariantPro", layout="wide")
 st.title("🧬 LabVariantPro – VCF Annotation Tool")
 
@@ -34,7 +33,6 @@ if "user" not in st.session_state:
 
 st.success(f"✅ Logged in: {st.session_state['user']}")
 
-# ─────────── Variant Annotation Logic ───────────
 def annotate_variant(chrom, pos, ref, alt):
     hgvs = f"{chrom}:g.{pos}{ref}>{alt}"
     url = f"https://myvariant.info/v1/variant/{hgvs}"
@@ -66,7 +64,6 @@ def annotate_variant(chrom, pos, ref, alt):
     except:
         return {'clinvar': 'Error', 'acmg': 'Error', 'rules_applied': []}
 
-# ─────────── VCF Parser ───────────
 def parse_vcf(file_obj):
     reader = vcfpy.Reader(file_obj)
     records = []
@@ -90,7 +87,6 @@ def parse_vcf(file_obj):
         })
     return pd.DataFrame(records)
 
-# ─────────── PDF Report Generator ───────────
 def generate_pdf(df, output_path="report.pdf"):
     c = canvas.Canvas(output_path, pagesize=letter)
     c.setFont("Helvetica", 12)
@@ -105,7 +101,6 @@ def generate_pdf(df, output_path="report.pdf"):
             y = 750
     c.save()
 
-# ─────────── Upload + Display ───────────
 uploaded_file = st.file_uploader("📂 Upload your `.vcf` file", type=["vcf"])
 
 if uploaded_file:
@@ -114,13 +109,10 @@ if uploaded_file:
             df = parse_vcf(vcf_io)
             st.success("✅ File parsed successfully.")
             st.dataframe(df)
-
             st.download_button("📥 Download CSV", df.to_csv(index=False).encode(), "labvariant_report.csv")
-
             if st.button("📄 Generate PDF"):
                 generate_pdf(df)
                 with open("report.pdf", "rb") as f:
                     st.download_button("Download PDF", f, "report.pdf")
-
     except Exception as e:
         st.error(f"❌ Error processing file: {e}")
